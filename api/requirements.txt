@@ -1,0 +1,15 @@
+# Agar S3 Manager API Dependencies
+
+# Web Framework
+Flask==3.0.0
+flask-cors==4.0.0
+
+# AWS SDK
+boto3==1.34.0
+botocore==1.34.0
+
+# Logging
+loguru==0.7.2
+
+# WSGI Server (optional, for production)
+gunicorn==21.2.0

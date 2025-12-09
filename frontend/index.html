@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agar S3 Document Manager</title>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Application CSS -->
+    <link rel="stylesheet" href="./assets/css/styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1><i class="fas fa-folder-open"></i> Agar S3 Document Manager</h1>
+                <p>Manage documents in AWS S3 storage</p>
+            </div>
+            <div class="header-actions">
+                <span id="connectionStatus" class="connection-status">
+                    <i class="fas fa-circle"></i> Checking...
+                </span>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Document Manager Panel -->
+            <div class="document-manager-panel">
+                <div class="panel-header">
+                    <div class="header-left">
+                        <i class="fas fa-folder"></i> S3 Document Management
+                    </div>
+                </div>
+
+                <!-- Document Library Layout -->
+                <div class="library-layout">
+                    <!-- Left Panel: Folder Tree (25%) -->
+                    <div class="folder-panel">
+                        <div class="folder-header">
+                            <h4><i class="fas fa-sitemap"></i> Folder Structure</h4>
+                            <button class="btn btn-small btn-icon" onclick="refreshFolderTree()" title="Refresh">
+                                <i class="fas fa-sync-alt"></i>
+                            </button>
+                        </div>
+                        <div class="folder-tree" id="folderTree">
+                            <div class="status-info">Loading folder structure...</div>
+                        </div>
+                        <div class="folder-actions">
+                            <button class="icon-btn" onclick="createFolderPrompt()" title="New Folder">
+                                <i class="fas fa-folder-plus"></i>
+                            </button>
+                            <input type="file" id="folderUploadInput" webkitdirectory multiple style="display: none;">
+                            <button class="icon-btn" onclick="document.getElementById('folderUploadInput').click()" title="Upload Folder">
+                                <i class="fas fa-folder-open"></i>
+                            </button>
+                            <button class="icon-btn delete-btn" onclick="deleteCurrentFolder()" title="Delete Folder">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Main Panel: File List (75%) -->
+                    <div class="file-panel">
+                        <!-- Breadcrumb Navigation -->
+                        <div class="breadcrumb-nav" id="breadcrumbNav">
+                            <span class="breadcrumb-item" onclick="navigateToFolder('')">
+                                <i class="fas fa-home"></i> Root
+                            </span>
+                        </div>
+
+                        <div class="file-toolbar">
+                            <div class="file-info">
+                                <label class="checkbox-container">
+                                    <input type="checkbox" id="selectAll" onchange="toggleSelectAll()">
+                                    <span class="checkmark"></span>
+                                    Select All
+                                </label>
+                                <span id="fileCount">0 files</span>
+                                <span id="selectionCount">0 selected</span>
+                            </div>
+                            <div class="search-controls">
+                                <input type="text" id="fileSearch" placeholder="Search files..." onkeyup="filterFiles()">
+                            </div>
+                        </div>
+
+                        <div class="file-list-container" id="fileListContainer">
+                            <div class="status-info">Select a folder to view files</div>
+                        </div>
+
+                        <div class="pagination-controls" id="paginationControls" style="display: none;">
+                            <button class="btn btn-small" id="prevPageBtn" onclick="previousPage()" disabled>
+                                <i class="fas fa-chevron-left"></i> Previous
+                            </button>
+                            <span id="pageInfo">Page 1 of 1</span>
+                            <button class="btn btn-small" id="nextPageBtn" onclick="nextPage()" disabled>
+                                Next <i class="fas fa-chevron-right"></i>
+                            </button>
+                        </div>
+
+                        <!-- File Action Buttons -->
+                        <div class="file-actions">
+                            <input type="file" id="fileUploadInput" multiple style="display: none;">
+                            <button class="icon-btn" onclick="document.getElementById('fileUploadInput').click()" title="Add Files">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                            <button class="icon-btn" onclick="downloadSelectedFiles()" title="Download Selected">
+                                <i class="fas fa-download"></i>
+                            </button>
+                            <button class="icon-btn" onclick="moveSelectedFiles()" title="Move Selected Files">
+                                <i class="fas fa-arrows-alt"></i>
+                            </button>
+                            <button class="icon-btn delete-btn" onclick="deleteSelectedFiles()" title="Delete Selected">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Upload Progress -->
+                <div class="upload-progress" id="uploadProgress" style="display: none;">
+                    <div class="progress-info">
+                        <span id="uploadFileName">Uploading...</span>
+                        <span id="uploadProgressText">0%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="uploadProgressFill"></div>
+                    </div>
+                </div>
+
+                <!-- Status Display -->
+                <div id="statusMessage" class="status-indicator" style="display: none;"></div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Agar S3 Document Manager &copy; 2024 | Powered by Ask Agar</p>
+        </footer>
+    </div>
+
+    <!-- Ask Agar Chat Interface -->
+    <div id="header-search" class="container p-5"></div>
+    <script src="https://d1bf5c4zvnlohu.cloudfront.net/development/addChatInterface.js"></script>
+
+    <!-- Move Files Modal -->
+    <div id="moveFilesModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-arrows-alt"></i> Move Selected Files</h3>
+                <span class="close" onclick="closeMoveModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="move-files-info">
+                    <p><strong>Moving <span id="moveFileCount">0</span> selected file(s)</strong></p>
+                    <p><small>Select a destination folder:</small></p>
+                </div>
+
+                <div class="form-group">
+                    <label>Destination Folder:</label>
+                    <div class="folder-selector">
+                        <div class="folder-tree-container" id="moveFolderTree">
+                            <div class="status-info">Loading folders...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Or create a new folder:</label>
+                    <div class="input-group">
+                        <input type="text" id="newMoveFolder" class="form-control" placeholder="Enter new folder name...">
+                        <button class="btn btn-secondary" onclick="createFolderForMove()">Create</button>
+                    </div>
+                </div>
+
+                <div class="selected-destination" id="selectedDestination" style="display: none;">
+                    <p><strong>Selected destination:</strong> <span id="destinationPath"></span></p>
+                </div>
+
+                <div class="modal-actions">
+                    <button class="btn btn-success" onclick="confirmMoveFiles()" id="moveBtn" disabled>
+                        <i class="fas fa-check"></i> Move Files
+                    </button>
+                    <button class="btn btn-secondary" onclick="closeMoveModal()">Cancel</button>
+                </div>
+
+                <div class="processing-status" id="moveProcessingStatus" style="display: none;">
+                    <div class="spinner"></div>
+                    <div class="status-text">Moving files...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Folder Modal -->
+    <div id="createFolderModal" class="modal" style="display: none;">
+        <div class="modal-content modal-small">
+            <div class="modal-header">
+                <h3><i class="fas fa-folder-plus"></i> Create New Folder</h3>
+                <span class="close" onclick="closeCreateFolderModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="newFolderName">Folder Name:</label>
+                    <input type="text" id="newFolderName" class="form-control" placeholder="Enter folder name...">
+                    <small class="form-text">Will be created in: <span id="createFolderPath">/</span></small>
+                </div>
+
+                <div class="modal-actions">
+                    <button class="btn btn-success" onclick="confirmCreateFolder()">
+                        <i class="fas fa-check"></i> Create
+                    </button>
+                    <button class="btn btn-secondary" onclick="closeCreateFolderModal()">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="./assets/js/app.js"></script>
+</body>
+</html>
