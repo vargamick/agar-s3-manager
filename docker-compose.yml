@@ -1,5 +1,6 @@
 # Agar S3 Manager - Docker Compose
 # Minimal S3 document management application
+# Configured for Coolify deployment with Traefik
 
 version: '3.8'
 
@@ -9,10 +10,9 @@ services:
     build:
       context: ./api
       dockerfile: Dockerfile
-    container_name: s3-manager-api
     restart: unless-stopped
-    ports:
-      - "3500:3500"
+    expose:
+      - "3500"
     environment:
       - FLASK_ENV=${FLASK_ENV:-production}
       - API_PORT=3500
@@ -32,15 +32,14 @@ services:
       retries: 3
       start_period: 10s
 
-  # Frontend (Nginx)
+  # Frontend (Nginx) - Main entry point with domain
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: s3-manager-frontend
     restart: unless-stopped
-    ports:
-      - "8080:80"
+    expose:
+      - "80"
     depends_on:
       api-server:
         condition: service_healthy
@@ -52,6 +51,13 @@ services:
       timeout: 10s
       retries: 3
       start_period: 5s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.s3docs.rule=Host(`s3docs.askagar.3dn.com.au`)"
+      - "traefik.http.routers.s3docs.entrypoints=https"
+      - "traefik.http.routers.s3docs.tls=true"
+      - "traefik.http.routers.s3docs.tls.certresolver=letsencrypt"
+      - "traefik.http.services.s3docs.loadbalancer.server.port=80"
 
 networks:
   s3-manager-network:
