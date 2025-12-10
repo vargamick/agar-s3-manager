@@ -45,16 +45,35 @@ services:
         condition: service_healthy
     networks:
       - s3-manager-network
+      - coolify
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 5s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.gzip.compress=true"
+      - "traefik.http.routers.http-0-s3docs-frontend.entryPoints=http"
+      - "traefik.http.routers.http-0-s3docs-frontend.middlewares=redirect-to-https"
+      - "traefik.http.routers.http-0-s3docs-frontend.rule=Host(`s3docs.askagar.3dn.com.au`) && PathPrefix(`/`)"
+      - "traefik.http.routers.http-0-s3docs-frontend.service=http-0-s3docs-frontend"
+      - "traefik.http.routers.https-0-s3docs-frontend.entryPoints=https"
+      - "traefik.http.routers.https-0-s3docs-frontend.middlewares=gzip"
+      - "traefik.http.routers.https-0-s3docs-frontend.rule=Host(`s3docs.askagar.3dn.com.au`) && PathPrefix(`/`)"
+      - "traefik.http.routers.https-0-s3docs-frontend.service=https-0-s3docs-frontend"
+      - "traefik.http.routers.https-0-s3docs-frontend.tls=true"
+      - "traefik.http.routers.https-0-s3docs-frontend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.http-0-s3docs-frontend.loadbalancer.server.port=80"
+      - "traefik.http.services.https-0-s3docs-frontend.loadbalancer.server.port=80"
 
 networks:
   s3-manager-network:
     driver: bridge
+  coolify:
+    external: true
 
 volumes:
   api-logs:
