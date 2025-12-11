@@ -32,8 +32,8 @@
             <button type="button" class="tab-btn active" data-tab="documents" onclick="switchTab('documents')">
                 <i class="fas fa-folder"></i> Documents
             </button>
-            <button type="button" class="tab-btn" data-tab="processing" onclick="switchTab('processing')">
-                <i class="fas fa-cogs"></i> Processing
+            <button type="button" class="tab-btn" data-tab="admin" onclick="switchTab('admin')">
+                <i class="fas fa-server"></i> Admin
             </button>
         </nav>
 
@@ -148,223 +148,153 @@
             </div>
             </div> <!-- End documentsTab -->
 
-            <!-- Processing Tab -->
-            <div id="processingTab" class="tab-content">
-                <div class="processing-panel">
-                    <!-- Processing Header -->
+            <!-- Admin Tab -->
+            <div id="adminTab" class="tab-content">
+                <div class="admin-panel">
+                    <!-- Admin Header -->
                     <div class="panel-header">
                         <div class="header-left">
-                            <i class="fas fa-cogs"></i> Data Processing Pipeline
+                            <i class="fas fa-server"></i> Database Administration
                         </div>
                         <div class="header-right">
-                            <span id="processingApiStatus" class="api-status">
+                            <span id="adminApiStatus" class="api-status">
                                 <i class="fas fa-circle"></i> Checking API...
                             </span>
                         </div>
                     </div>
 
-                    <!-- Processing Content -->
-                    <div class="processing-content">
-                        <!-- Scrape Run Selector -->
-                        <div class="processing-section">
-                            <h3><i class="fas fa-database"></i> Select Scrape Run</h3>
-                            <div class="scrape-run-selector">
-                                <div class="form-group">
-                                    <label for="scrapeRunPath">Scrape Run Path:</label>
-                                    <div class="input-with-btn">
-                                        <input type="text" id="scrapeRunPath" class="form-control"
-                                               placeholder="e.g., agar/20251119_015555_..." readonly>
-                                        <button type="button" class="btn btn-secondary" onclick="openScrapeRunSelector()">
-                                            <i class="fas fa-folder-open"></i> Browse
-                                        </button>
+                    <!-- Admin Content -->
+                    <div class="admin-content">
+                        <!-- System Status -->
+                        <div class="admin-section">
+                            <div class="section-header">
+                                <h3><i class="fas fa-heartbeat"></i> System Status</h3>
+                                <button class="btn btn-small btn-icon" onclick="refreshAdminStatus()" title="Refresh">
+                                    <i class="fas fa-sync-alt"></i>
+                                </button>
+                            </div>
+                            <div class="status-grid" id="adminStatusGrid">
+                                <div class="status-card">
+                                    <div class="status-icon neo4j">
+                                        <i class="fas fa-database"></i>
+                                    </div>
+                                    <div class="status-info">
+                                        <span class="status-label">Neo4j</span>
+                                        <span class="status-value" id="neo4jStatus">--</span>
+                                    </div>
+                                </div>
+                                <div class="status-card">
+                                    <div class="status-icon postgres">
+                                        <i class="fas fa-database"></i>
+                                    </div>
+                                    <div class="status-info">
+                                        <span class="status-label">PostgreSQL</span>
+                                        <span class="status-value" id="postgresStatus">--</span>
+                                    </div>
+                                </div>
+                                <div class="status-card">
+                                    <div class="status-icon s3">
+                                        <i class="fas fa-cloud"></i>
+                                    </div>
+                                    <div class="status-info">
+                                        <span class="status-label">S3</span>
+                                        <span class="status-value" id="s3Status">--</span>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Phase Tabs -->
-                        <div class="phase-tabs">
-                            <button type="button" class="phase-tab active" data-phase="metadata" onclick="switchPhase('metadata')">
-                                <span class="phase-number">1</span>
-                                <span class="phase-name">Metadata</span>
-                                <span class="phase-status" id="metadataPhaseStatus"></span>
-                            </button>
-                            <button type="button" class="phase-tab" data-phase="pdf" onclick="switchPhase('pdf')">
-                                <span class="phase-number">2</span>
-                                <span class="phase-name">PDF Processing</span>
-                                <span class="phase-status" id="pdfPhaseStatus"></span>
-                            </button>
-                            <button type="button" class="phase-tab" data-phase="embeddings" onclick="switchPhase('embeddings')">
-                                <span class="phase-number">3</span>
-                                <span class="phase-name">Embeddings</span>
-                                <span class="phase-status" id="embeddingsPhaseStatus"></span>
-                            </button>
-                        </div>
-
-                        <!-- Phase Content Panels -->
-                        <div class="phase-panels">
-                            <!-- Phase 1: Metadata Processing -->
-                            <div id="metadataPhase" class="phase-panel active">
-                                <div class="phase-header">
-                                    <h4>Metadata Processing</h4>
-                                    <p>Convert JSON product metadata into graph entities and relationships</p>
+                        <!-- Database Stats -->
+                        <div class="admin-section">
+                            <h3><i class="fas fa-chart-bar"></i> Database Statistics</h3>
+                            <div class="stats-grid" id="adminStatsGrid">
+                                <div class="stat-card">
+                                    <span class="stat-value" id="statEntities">--</span>
+                                    <span class="stat-label">Entities</span>
                                 </div>
-
-                                <div class="phase-controls">
-                                    <div class="control-row">
-                                        <div class="form-group">
-                                            <label for="metadataBatchSize">Batch Size:</label>
-                                            <input type="number" id="metadataBatchSize" class="form-control-small" value="10" min="1" max="50">
-                                        </div>
-                                        <button type="button" class="btn btn-primary" id="startMetadataBtn" onclick="startMetadataProcessing()">
-                                            <i class="fas fa-play"></i> Start Processing
-                                        </button>
-                                    </div>
+                                <div class="stat-card">
+                                    <span class="stat-value" id="statRelationships">--</span>
+                                    <span class="stat-label">Relationships</span>
                                 </div>
-
-                                <div class="phase-progress" id="metadataProgress" style="display: none;">
-                                    <div class="progress-header">
-                                        <span id="metadataProgressLabel">Processing products...</span>
-                                        <span id="metadataProgressPercent">0%</span>
-                                    </div>
-                                    <div class="progress-bar">
-                                        <div class="progress-fill" id="metadataProgressFill"></div>
-                                    </div>
-                                    <div class="progress-stats">
-                                        <span>Processed: <strong id="metadataProcessed">0</strong></span>
-                                        <span>Failed: <strong id="metadataFailed">0</strong></span>
-                                        <span>Total: <strong id="metadataTotal">0</strong></span>
-                                    </div>
+                                <div class="stat-card">
+                                    <span class="stat-value" id="statEmbeddings">--</span>
+                                    <span class="stat-label">Embeddings</span>
                                 </div>
-
-                                <div class="phase-results" id="metadataResults" style="display: none;">
-                                    <h5>Results</h5>
-                                    <div class="results-list" id="metadataResultsList"></div>
-                                </div>
-                            </div>
-
-                            <!-- Phase 2: PDF Processing -->
-                            <div id="pdfPhase" class="phase-panel">
-                                <div class="phase-header">
-                                    <h4>PDF Processing</h4>
-                                    <p>Extract content from PDF documents and create document chunks</p>
-                                </div>
-
-                                <div class="phase-controls">
-                                    <div class="control-row">
-                                        <div class="form-group">
-                                            <label for="pdfBatchSize">Batch Size:</label>
-                                            <input type="number" id="pdfBatchSize" class="form-control-small" value="5" min="1" max="20">
-                                        </div>
-                                        <div class="form-group">
-                                            <label for="chunkSize">Chunk Size:</label>
-                                            <input type="number" id="chunkSize" class="form-control-small" value="1000" min="100" max="5000">
-                                        </div>
-                                        <button type="button" class="btn btn-primary" id="startPdfBtn" onclick="startPdfProcessing()">
-                                            <i class="fas fa-play"></i> Start Processing
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <div class="phase-progress" id="pdfProgress" style="display: none;">
-                                    <div class="progress-header">
-                                        <span id="pdfProgressLabel">Processing PDFs...</span>
-                                        <span id="pdfProgressPercent">0%</span>
-                                    </div>
-                                    <div class="progress-bar">
-                                        <div class="progress-fill" id="pdfProgressFill"></div>
-                                    </div>
-                                    <div class="progress-stats">
-                                        <span>Processed: <strong id="pdfProcessed">0</strong></span>
-                                        <span>Failed: <strong id="pdfFailed">0</strong></span>
-                                        <span>Total: <strong id="pdfTotal">0</strong></span>
-                                    </div>
-                                </div>
-
-                                <div class="pdf-list-container" id="pdfListContainer" style="display: none;">
-                                    <h5>PDFs to Process (<span id="pdfCount">0</span>)</h5>
-                                    <div class="pdf-list" id="pdfList"></div>
-                                </div>
-
-                                <div class="phase-results" id="pdfResults" style="display: none;">
-                                    <h5>Results</h5>
-                                    <div class="results-list" id="pdfResultsList"></div>
-                                </div>
-                            </div>
-
-                            <!-- Phase 3: Embeddings -->
-                            <div id="embeddingsPhase" class="phase-panel">
-                                <div class="phase-header">
-                                    <h4>Embedding Generation</h4>
-                                    <p>Generate vector embeddings for entities</p>
-                                </div>
-
-                                <div class="phase-controls">
-                                    <div class="control-row">
-                                        <div class="form-group">
-                                            <label for="embeddingsBatchSize">Batch Size:</label>
-                                            <input type="number" id="embeddingsBatchSize" class="form-control-small" value="20" min="1" max="100">
-                                        </div>
-                                        <div class="form-group">
-                                            <label for="entityTypeFilter">Entity Types:</label>
-                                            <select id="entityTypeFilter" class="form-control-small">
-                                                <option value="">All Types</option>
-                                                <option value="Product">Product</option>
-                                                <option value="DocumentChunk">DocumentChunk</option>
-                                            </select>
-                                        </div>
-                                        <button type="button" class="btn btn-primary" id="startEmbeddingsBtn" onclick="startEmbeddingsProcessing()">
-                                            <i class="fas fa-play"></i> Start Processing
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <div class="phase-progress" id="embeddingsProgress" style="display: none;">
-                                    <div class="progress-header">
-                                        <span id="embeddingsProgressLabel">Generating embeddings...</span>
-                                        <span id="embeddingsProgressPercent">0%</span>
-                                    </div>
-                                    <div class="progress-bar">
-                                        <div class="progress-fill" id="embeddingsProgressFill"></div>
-                                    </div>
-                                    <div class="progress-stats">
-                                        <span>Processed: <strong id="embeddingsProcessed">0</strong></span>
-                                        <span>Failed: <strong id="embeddingsFailed">0</strong></span>
-                                        <span>Total: <strong id="embeddingsTotal">0</strong></span>
-                                    </div>
-                                </div>
-
-                                <div class="entities-summary" id="entitiesSummary" style="display: none;">
-                                    <div class="summary-card">
-                                        <span class="summary-label">With Embeddings</span>
-                                        <span class="summary-value" id="entitiesWithEmbeddings">0</span>
-                                    </div>
-                                    <div class="summary-card">
-                                        <span class="summary-label">Without Embeddings</span>
-                                        <span class="summary-value" id="entitiesWithoutEmbeddings">0</span>
-                                    </div>
-                                </div>
-
-                                <div class="phase-results" id="embeddingsResults" style="display: none;">
-                                    <h5>Results</h5>
-                                    <div class="results-list" id="embeddingsResultsList"></div>
+                                <div class="stat-card">
+                                    <span class="stat-value" id="statLabels">--</span>
+                                    <span class="stat-label">Labels</span>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Job History -->
-                        <div class="processing-section job-history-section">
-                            <h3><i class="fas fa-history"></i> Active Jobs</h3>
-                            <div class="job-list" id="jobList">
-                                <div class="status-info">No active jobs</div>
+                        <!-- Current Job Status -->
+                        <div class="admin-section" id="currentJobSection" style="display: none;">
+                            <div class="section-header">
+                                <h3><i class="fas fa-tasks"></i> Current Job</h3>
+                                <button class="btn btn-small btn-danger" id="cancelJobBtn" onclick="cancelCurrentJob()">
+                                    <i class="fas fa-stop"></i> Cancel
+                                </button>
+                            </div>
+                            <div class="job-status-card">
+                                <div class="job-status-header">
+                                    <span class="job-phase-badge" id="jobPhaseBadge">--</span>
+                                    <span class="job-message" id="jobMessage">--</span>
+                                    <div class="spinner" id="jobSpinner"></div>
+                                </div>
+                                <div class="progress-bar">
+                                    <div class="progress-fill" id="jobProgressFill" style="width: 0%"></div>
+                                </div>
+                                <div class="job-details">
+                                    <span>Job ID: <code id="jobId">--</code></span>
+                                    <span>Started: <span id="jobStarted">--</span></span>
+                                </div>
+                                <div class="job-error" id="jobError" style="display: none;"></div>
+                                <div class="job-results" id="jobResults" style="display: none;">
+                                    <h5>Results</h5>
+                                    <ul id="jobResultsList"></ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Scrape Runs -->
+                        <div class="admin-section">
+                            <h3><i class="fas fa-database"></i> Available Scrape Runs</h3>
+                            <div class="scrape-runs-list" id="scrapeRunsList">
+                                <div class="status-info"><i class="fas fa-spinner fa-spin"></i> Loading...</div>
+                            </div>
+                        </div>
+
+                        <!-- Refresh Action -->
+                        <div class="admin-section">
+                            <h3><i class="fas fa-sync"></i> Start Refresh</h3>
+                            <div class="action-card">
+                                <p class="action-description" id="refreshDescription">
+                                    No scrape run selected. Will use most recent FULL run.
+                                </p>
+                                <button class="btn btn-primary btn-large" id="startRefreshBtn" onclick="startRefresh()">
+                                    <i class="fas fa-play"></i> Start Refresh from S3
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Database Reset -->
+                        <div class="admin-section danger-section">
+                            <h3><i class="fas fa-exclamation-triangle"></i> Database Reset</h3>
+                            <div class="reset-preview" id="resetPreview">
+                                <p class="warning-text">Loading reset preview...</p>
+                            </div>
+                            <div class="action-card">
+                                <button class="btn btn-danger" id="resetDbBtn" onclick="showResetConfirm()">
+                                    <i class="fas fa-trash-alt"></i> Reset Databases
+                                </button>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Processing Status Display -->
-                    <div id="processingStatusMessage" class="status-indicator" style="display: none;"></div>
+                    <!-- Admin Status Display -->
+                    <div id="adminStatusMessage" class="status-indicator" style="display: none;"></div>
                 </div>
-            </div> <!-- End processingTab -->
+            </div> <!-- End adminTab -->
         </main>
 
         <!-- Footer -->
@@ -426,27 +356,23 @@
         </div>
     </div>
 
-    <!-- Scrape Run Selector Modal -->
-    <div id="scrapeRunModal" class="modal" style="display: none;">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3><i class="fas fa-database"></i> Select Scrape Run</h3>
-                <span class="close" onclick="closeScrapeRunModal()">&times;</span>
+    <!-- Reset Confirmation Modal -->
+    <div id="resetConfirmModal" class="modal" style="display: none;">
+        <div class="modal-content modal-small">
+            <div class="modal-header danger">
+                <h3><i class="fas fa-exclamation-triangle"></i> Confirm Database Reset</h3>
+                <span class="close" onclick="closeResetModal()">&times;</span>
             </div>
             <div class="modal-body">
-                <div class="scrape-run-browser">
-                    <div class="folder-tree-container" id="scrapeRunFolderTree">
-                        <div class="status-info">Loading scrape runs...</div>
-                    </div>
-                </div>
-                <div class="selected-scrape-run" id="selectedScrapeRun" style="display: none;">
-                    <p><strong>Selected:</strong> <span id="selectedScrapeRunPath"></span></p>
+                <div class="warning-box">
+                    <p><strong>This action cannot be undone!</strong></p>
+                    <p>A backup will be created automatically before reset.</p>
                 </div>
                 <div class="modal-actions">
-                    <button type="button" class="btn btn-success" onclick="confirmScrapeRunSelection()" id="selectScrapeRunBtn" disabled>
-                        <i class="fas fa-check"></i> Select
+                    <button type="button" class="btn btn-danger" onclick="confirmReset()">
+                        <i class="fas fa-trash-alt"></i> Yes, Reset Everything
                     </button>
-                    <button type="button" class="btn btn-secondary" onclick="closeScrapeRunModal()">Cancel</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeResetModal()">Cancel</button>
                 </div>
             </div>
         </div>

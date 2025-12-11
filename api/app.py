@@ -12,6 +12,7 @@ from config import Config, setup_logging
 from routes.health import health_bp
 from routes.s3_management import s3_bp
 from routes.processing import processing_bp
+from routes.admin import admin_bp
 
 # Initialize logging at module level for Gunicorn
 os.makedirs('logs', exist_ok=True)
@@ -29,6 +30,7 @@ def create_app():
     app.register_blueprint(health_bp, url_prefix='/api/health')
     app.register_blueprint(s3_bp, url_prefix='/api/s3')
     app.register_blueprint(processing_bp, url_prefix='/api/processing')
+    app.register_blueprint(admin_bp, url_prefix='/api/admin')
 
     # Root endpoint
     @app.route('/')
@@ -42,7 +44,8 @@ def create_app():
                 's3_documents': '/api/s3/documents',
                 's3_folders': '/api/s3/folders',
                 's3_tree': '/api/s3/structure/tree',
-                'processing': '/api/processing/'
+                'processing': '/api/processing/',
+                'admin': '/api/admin/'
             }
         })
 

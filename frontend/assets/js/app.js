@@ -881,808 +881,463 @@ window.switchTab = function(tabName) {
         content.classList.toggle('active', content.id === tabName + 'Tab');
     });
 
-    // Initialize processing tab if switching to it
-    if (tabName === 'processing') {
-        initializeProcessingTab();
+    // Initialize admin tab if switching to it
+    if (tabName === 'admin') {
+        initializeAdminTab();
     }
 };
 
 // ============================================
-// Processing State
+// Admin State
 // ============================================
 
-let processingState = {
-    apiConfigured: false,
-    currentScrapeRunPath: '',
-    currentPhase: 'metadata',
-    jobs: {
-        metadata: null,
-        pdf: null,
-        embeddings: null
-    },
-    data: {
-        products: [],
-        categories: [],
-        pdfs: [],
-        entities: []
-    }
+let adminState = {
+    currentJobId: null,
+    selectedScrapeRun: null,
+    pollingInterval: null
 };
 
 // ============================================
-// Processing Initialization
+// Admin Tab Initialization
 // ============================================
 
-async function initializeProcessingTab() {
-    await checkProcessingApiConfig();
-    await refreshJobList();
+async function initializeAdminTab() {
+    await refreshAdminStatus();
+    await loadScrapeRuns();
+    await loadResetPreview();
+    await checkCurrentJob();
 }
 
-async function checkProcessingApiConfig() {
-    const statusElement = document.getElementById('processingApiStatus');
+async function refreshAdminStatus() {
+    const statusElement = document.getElementById('adminApiStatus');
 
     try {
-        const response = await fetch(`${API_BASE}/api/processing/config`, {
+        // Check admin health
+        const response = await fetch(`${API_BASE}/api/admin/health`, {
             credentials: 'include'
         });
 
         const result = await response.json();
 
-        if (result.configured) {
-            processingState.apiConfigured = true;
+        if (response.ok && result.success) {
             statusElement.innerHTML = '<i class="fas fa-circle"></i> API Connected';
             statusElement.className = 'api-status connected';
+
+            // Update individual service statuses
+            updateServiceStatus('neo4jStatus', result.neo4j);
+            updateServiceStatus('postgresStatus', result.postgres);
+            updateServiceStatus('s3Status', result.s3);
+
+            // Load stats
+            await loadAdminStats();
         } else {
-            processingState.apiConfigured = false;
-            statusElement.innerHTML = '<i class="fas fa-circle"></i> API Key Not Configured';
-            statusElement.className = 'api-status not-configured';
+            statusElement.innerHTML = '<i class="fas fa-circle"></i> API Error';
+            statusElement.className = 'api-status disconnected';
         }
     } catch (error) {
-        processingState.apiConfigured = false;
         statusElement.innerHTML = '<i class="fas fa-circle"></i> API Unavailable';
         statusElement.className = 'api-status disconnected';
-        console.error('Failed to check processing API config:', error);
+        console.error('Failed to check admin API:', error);
     }
 }
 
+function updateServiceStatus(elementId, status) {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+
+    if (status === 'connected' || status === true || status === 'healthy') {
+        element.textContent = 'Connected';
+        element.className = 'status-value connected';
+    } else if (status === 'disconnected' || status === false || status === 'unhealthy') {
+        element.textContent = 'Disconnected';
+        element.className = 'status-value disconnected';
+    } else {
+        element.textContent = status || '--';
+        element.className = 'status-value';
+    }
+}
+
+async function loadAdminStats() {
+    try {
+        const response = await fetch(`${API_BASE}/api/admin/stats`, {
+            credentials: 'include'
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            document.getElementById('statEntities').textContent = formatNumber(result.entities || 0);
+            document.getElementById('statRelationships').textContent = formatNumber(result.relationships || 0);
+            document.getElementById('statEmbeddings').textContent = formatNumber(result.embeddings || 0);
+            document.getElementById('statLabels').textContent = formatNumber(result.labels || 0);
+        }
+    } catch (error) {
+        console.error('Failed to load admin stats:', error);
+    }
+}
+
+function formatNumber(num) {
+    if (num >= 1000000) {
+        return (num / 1000000).toFixed(1) + 'M';
+    } else if (num >= 1000) {
+        return (num / 1000).toFixed(1) + 'K';
+    }
+    return num.toString();
+}
+
 // ============================================
-// Phase Navigation
+// Scrape Runs Management
 // ============================================
 
-window.switchPhase = function(phase) {
-    processingState.currentPhase = phase;
-
-    // Update phase tabs
-    document.querySelectorAll('.phase-tab').forEach(tab => {
-        tab.classList.toggle('active', tab.dataset.phase === phase);
-    });
-
-    // Update phase panels
-    document.querySelectorAll('.phase-panel').forEach(panel => {
-        panel.classList.toggle('active', panel.id === phase + 'Phase');
-    });
-};
-
-// ============================================
-// Scrape Run Selection
-// ============================================
-
-let selectedScrapeRunPathTemp = null;
-
-window.openScrapeRunSelector = async function() {
-    document.getElementById('scrapeRunModal').style.display = 'flex';
-    selectedScrapeRunPathTemp = null;
-    document.getElementById('selectScrapeRunBtn').disabled = true;
-    document.getElementById('selectedScrapeRun').style.display = 'none';
-
-    await loadScrapeRunFolders();
-};
-
-window.closeScrapeRunModal = function() {
-    document.getElementById('scrapeRunModal').style.display = 'none';
-};
-
-async function loadScrapeRunFolders() {
-    const container = document.getElementById('scrapeRunFolderTree');
+async function loadScrapeRuns() {
+    const container = document.getElementById('scrapeRunsList');
     container.innerHTML = '<div class="status-info"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
 
     try {
-        // Load the folder structure from S3
-        const response = await fetch(`${API_BASE}/api/s3/structure/tree`, {
+        const response = await fetch(`${API_BASE}/api/admin/s3/scrape-runs`, {
             credentials: 'include'
         });
 
         const result = await response.json();
 
-        if (response.ok && result.tree_structure) {
-            renderScrapeRunFolders(result.tree_structure.tree || []);
+        if (response.ok && result.success && result.runs && result.runs.length > 0) {
+            renderScrapeRuns(result.runs);
         } else {
-            container.innerHTML = '<div class="status-info">Failed to load folders</div>';
+            container.innerHTML = '<div class="status-info">No scrape runs found</div>';
         }
     } catch (error) {
-        console.error('Failed to load scrape run folders:', error);
-        container.innerHTML = '<div class="status-info">Error loading folders</div>';
+        console.error('Failed to load scrape runs:', error);
+        container.innerHTML = '<div class="status-info">Error loading scrape runs</div>';
     }
 }
 
-function renderScrapeRunFolders(tree, level = 0) {
-    const container = document.getElementById('scrapeRunFolderTree');
+function renderScrapeRuns(runs) {
+    const container = document.getElementById('scrapeRunsList');
+    container.innerHTML = '';
 
-    if (level === 0) {
-        container.innerHTML = '';
-    }
-
-    tree.forEach(item => {
-        if (item.type === 'folder') {
-            const div = document.createElement('div');
-            div.className = 'scrape-run-item';
-            div.style.paddingLeft = `${level * 15 + 12}px`;
-            div.innerHTML = `<i class="fas fa-folder"></i> ${item.name}`;
-            div.dataset.path = item.path;
-            div.onclick = () => selectScrapeRunFolder(item.path, div);
-            container.appendChild(div);
-
-            // Render children
-            if (item.children && item.children.length > 0) {
-                renderScrapeRunFolders(item.children, level + 1);
-            }
-        }
-    });
-}
-
-function selectScrapeRunFolder(path, element) {
-    document.querySelectorAll('.scrape-run-item').forEach(item => {
-        item.classList.remove('selected');
-    });
-    element.classList.add('selected');
-
-    selectedScrapeRunPathTemp = path;
-    document.getElementById('selectedScrapeRunPath').textContent = path;
-    document.getElementById('selectedScrapeRun').style.display = 'block';
-    document.getElementById('selectScrapeRunBtn').disabled = false;
-}
-
-window.confirmScrapeRunSelection = function() {
-    if (selectedScrapeRunPathTemp) {
-        processingState.currentScrapeRunPath = selectedScrapeRunPathTemp;
-        document.getElementById('scrapeRunPath').value = selectedScrapeRunPathTemp;
-        closeScrapeRunModal();
-        showProcessingStatus(`Scrape run selected: ${selectedScrapeRunPathTemp}`, 'success');
-    }
-};
-
-// ============================================
-// Phase 1: Metadata Processing
-// ============================================
-
-window.startMetadataProcessing = async function() {
-    if (!processingState.apiConfigured) {
-        showProcessingStatus('Processing API is not configured', 'error');
-        return;
-    }
-
-    if (!processingState.currentScrapeRunPath) {
-        showProcessingStatus('Please select a scrape run first', 'warning');
-        return;
-    }
-
-    const batchSize = parseInt(document.getElementById('metadataBatchSize').value) || 10;
-    const btn = document.getElementById('startMetadataBtn');
-
-    try {
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Starting...';
-
-        // Step 1: Start the metadata job
-        const startResponse = await fetch(`${API_BASE}/api/processing/metadata/start`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({
-                scrapeRunPath: processingState.currentScrapeRunPath,
-                options: { batchSize }
-            })
-        });
-
-        const startResult = await startResponse.json();
-
-        if (!startResult.success) {
-            throw new Error(startResult.error || 'Failed to start metadata job');
+    runs.forEach(run => {
+        const div = document.createElement('div');
+        div.className = 'scrape-run-card';
+        if (adminState.selectedScrapeRun === run.path) {
+            div.classList.add('selected');
         }
 
-        processingState.jobs.metadata = startResult.jobId;
-        showProcessingStatus(`Metadata job started: ${startResult.jobId}`, 'success');
+        const runDate = run.date ? new Date(run.date).toLocaleDateString() : 'Unknown';
+        const runType = run.type || 'FULL';
+        const productCount = run.productCount || 0;
 
-        // Step 2: Load metadata
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading metadata...';
-
-        const loadResponse = await fetch(`${API_BASE}/api/processing/metadata/load`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({
-                jobId: startResult.jobId,
-                scrapeRunPath: processingState.currentScrapeRunPath
-            })
-        });
-
-        const loadResult = await loadResponse.json();
-
-        if (!loadResult.success) {
-            throw new Error(loadResult.error || 'Failed to load metadata');
-        }
-
-        processingState.data.products = loadResult.products || [];
-        processingState.data.categories = loadResult.categories || [];
-
-        const totalProducts = processingState.data.products.length;
-        showProcessingStatus(`Loaded ${totalProducts} products, ${loadResult.totalCategories || 0} categories`, 'success');
-
-        // Step 3: Process in batches
-        if (totalProducts > 0) {
-            await processMetadataBatches(startResult.jobId, batchSize);
-        }
-
-    } catch (error) {
-        console.error('Metadata processing error:', error);
-        showProcessingStatus(`Error: ${error.message}`, 'error');
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-play"></i> Start Processing';
-        await refreshJobList();
-    }
-};
-
-async function processMetadataBatches(jobId, batchSize) {
-    const products = processingState.data.products;
-    const total = products.length;
-
-    // Show progress
-    const progressEl = document.getElementById('metadataProgress');
-    const resultsEl = document.getElementById('metadataResults');
-    const resultsListEl = document.getElementById('metadataResultsList');
-
-    progressEl.style.display = 'block';
-    resultsEl.style.display = 'block';
-    resultsListEl.innerHTML = '';
-
-    document.getElementById('metadataTotal').textContent = total;
-
-    let processed = 0;
-    let failed = 0;
-
-    for (let i = 0; i < total; i += batchSize) {
-        const batch = products.slice(i, i + batchSize);
-
-        try {
-            const response = await fetch(`${API_BASE}/api/processing/metadata/batch`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify({
-                    jobId,
-                    products: batch
-                })
-            });
-
-            const result = await response.json();
-
-            if (result.success) {
-                processed += result.processed || 0;
-                failed += result.failed || 0;
-
-                // Add results to list
-                if (result.results) {
-                    result.results.forEach(r => {
-                        const itemHtml = `
-                            <div class="result-item ${r.success ? 'success' : 'error'}">
-                                <i class="fas fa-${r.success ? 'check-circle' : 'times-circle'}"></i>
-                                <span class="result-name">${r.productName}</span>
-                                <span class="result-stats">${r.success ? `${r.entitiesCreated} entities` : r.error || 'Failed'}</span>
-                            </div>
-                        `;
-                        resultsListEl.insertAdjacentHTML('beforeend', itemHtml);
-                    });
-                }
-            }
-        } catch (error) {
-            console.error('Batch processing error:', error);
-            failed += batch.length;
-        }
-
-        // Update progress
-        updateMetadataProgress(processed, failed, total);
-    }
-
-    // Mark phase as complete
-    document.getElementById('metadataPhaseStatus').textContent = 'Complete';
-    document.getElementById('metadataPhaseStatus').className = 'phase-status completed';
-    document.querySelector('.phase-tab[data-phase="metadata"]').classList.add('completed');
-
-    showProcessingStatus(`Metadata processing complete: ${processed} succeeded, ${failed} failed`, 'success');
-}
-
-function updateMetadataProgress(processed, failed, total) {
-    const percent = Math.round((processed + failed) / total * 100);
-
-    document.getElementById('metadataProcessed').textContent = processed;
-    document.getElementById('metadataFailed').textContent = failed;
-    document.getElementById('metadataProgressPercent').textContent = `${percent}%`;
-    document.getElementById('metadataProgressFill').style.width = `${percent}%`;
-    document.getElementById('metadataProgressLabel').textContent =
-        `Processing products... (${processed + failed}/${total})`;
-}
-
-// ============================================
-// Phase 2: PDF Processing
-// ============================================
-
-window.startPdfProcessing = async function() {
-    if (!processingState.apiConfigured) {
-        showProcessingStatus('Processing API is not configured', 'error');
-        return;
-    }
-
-    if (!processingState.currentScrapeRunPath) {
-        showProcessingStatus('Please select a scrape run first', 'warning');
-        return;
-    }
-
-    const batchSize = parseInt(document.getElementById('pdfBatchSize').value) || 5;
-    const chunkSize = parseInt(document.getElementById('chunkSize').value) || 1000;
-    const btn = document.getElementById('startPdfBtn');
-
-    try {
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Starting...';
-
-        // Step 1: Start the PDF job
-        const startResponse = await fetch(`${API_BASE}/api/processing/pdf/start`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({
-                scrapeRunPath: processingState.currentScrapeRunPath,
-                options: { batchSize, chunkSize, chunkOverlap: 200 }
-            })
-        });
-
-        const startResult = await startResponse.json();
-
-        if (!startResult.success) {
-            throw new Error(startResult.error || 'Failed to start PDF job');
-        }
-
-        processingState.jobs.pdf = startResult.jobId;
-        showProcessingStatus(`PDF job started: ${startResult.jobId}`, 'success');
-
-        // Step 2: List PDFs
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Listing PDFs...';
-
-        const listResponse = await fetch(
-            `${API_BASE}/api/processing/pdf/list?jobId=${startResult.jobId}&scrapeRunPath=${encodeURIComponent(processingState.currentScrapeRunPath)}`,
-            { credentials: 'include' }
-        );
-
-        const listResult = await listResponse.json();
-
-        if (!listResult.success) {
-            throw new Error(listResult.error || 'Failed to list PDFs');
-        }
-
-        processingState.data.pdfs = listResult.pdfs || [];
-        const totalPdfs = processingState.data.pdfs.length;
-
-        // Display PDF list
-        displayPdfList(processingState.data.pdfs);
-        showProcessingStatus(`Found ${totalPdfs} PDFs to process`, 'success');
-
-        // Step 3: Process PDFs in batches
-        if (totalPdfs > 0) {
-            await processPdfBatches(startResult.jobId, batchSize);
-        }
-
-    } catch (error) {
-        console.error('PDF processing error:', error);
-        showProcessingStatus(`Error: ${error.message}`, 'error');
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-play"></i> Start Processing';
-        await refreshJobList();
-    }
-};
-
-function displayPdfList(pdfs) {
-    const container = document.getElementById('pdfListContainer');
-    const list = document.getElementById('pdfList');
-    const count = document.getElementById('pdfCount');
-
-    container.style.display = 'block';
-    count.textContent = pdfs.length;
-
-    list.innerHTML = pdfs.slice(0, 50).map(pdf => `
-        <div class="pdf-item">
-            <i class="fas fa-file-pdf"></i>
-            <span class="pdf-name">${pdf.filename}</span>
-            <span class="pdf-size">${formatFileSize(pdf.size || 0)}</span>
-        </div>
-    `).join('');
-
-    if (pdfs.length > 50) {
-        list.insertAdjacentHTML('beforeend', `
-            <div class="pdf-item">
-                <i class="fas fa-ellipsis-h"></i>
-                <span class="pdf-name">... and ${pdfs.length - 50} more</span>
+        div.innerHTML = `
+            <div class="scrape-run-info">
+                <span class="scrape-run-type ${runType.toLowerCase()}">${runType}</span>
+                <span class="scrape-run-name">${run.name || run.path}</span>
+                <span class="scrape-run-meta">${runDate} | ${productCount} products</span>
             </div>
-        `);
-    }
-}
+            <button class="btn btn-small ${adminState.selectedScrapeRun === run.path ? 'btn-success' : 'btn-secondary'}"
+                    onclick="selectScrapeRun('${run.path}', this)">
+                ${adminState.selectedScrapeRun === run.path ? '<i class="fas fa-check"></i> Selected' : 'Select'}
+            </button>
+        `;
 
-async function processPdfBatches(jobId, batchSize) {
-    const pdfs = processingState.data.pdfs;
-    const total = pdfs.length;
-
-    // Show progress
-    const progressEl = document.getElementById('pdfProgress');
-    const resultsEl = document.getElementById('pdfResults');
-    const resultsListEl = document.getElementById('pdfResultsList');
-
-    progressEl.style.display = 'block';
-    resultsEl.style.display = 'block';
-    resultsListEl.innerHTML = '';
-
-    document.getElementById('pdfTotal').textContent = total;
-
-    let processed = 0;
-    let failed = 0;
-
-    for (let i = 0; i < total; i += batchSize) {
-        const batch = pdfs.slice(i, i + batchSize);
-
-        // For each PDF in the batch, we need to fetch its content from S3
-        const pdfBatchData = [];
-
-        for (const pdf of batch) {
-            try {
-                // Get presigned URL and download PDF content
-                const downloadResponse = await fetch(
-                    `${API_BASE}/api/s3/download?key=${encodeURIComponent(pdf.path)}`,
-                    { credentials: 'include' }
-                );
-
-                if (downloadResponse.ok) {
-                    const downloadResult = await downloadResponse.json();
-                    if (downloadResult.url) {
-                        // Fetch the actual PDF content
-                        const pdfResponse = await fetch(downloadResult.url);
-                        const pdfBlob = await pdfResponse.blob();
-                        const base64Content = await blobToBase64(pdfBlob);
-
-                        pdfBatchData.push({
-                            ...pdf,
-                            content: base64Content
-                        });
-                    }
-                }
-            } catch (error) {
-                console.error(`Failed to fetch PDF ${pdf.filename}:`, error);
-                failed++;
-            }
-        }
-
-        // Process the batch
-        if (pdfBatchData.length > 0) {
-            try {
-                const response = await fetch(`${API_BASE}/api/processing/pdf/batch`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include',
-                    body: JSON.stringify({
-                        jobId,
-                        pdfs: pdfBatchData
-                    })
-                });
-
-                const result = await response.json();
-
-                if (result.success) {
-                    processed += result.processed || 0;
-                    failed += result.failed || 0;
-
-                    // Add results to list
-                    if (result.results) {
-                        result.results.forEach(r => {
-                            const itemHtml = `
-                                <div class="result-item ${r.success ? 'success' : 'error'}">
-                                    <i class="fas fa-${r.success ? 'check-circle' : 'times-circle'}"></i>
-                                    <span class="result-name">${r.filename}</span>
-                                    <span class="result-stats">${r.success ? `${r.chunksCreated} chunks` : r.error || 'Failed'}</span>
-                                </div>
-                            `;
-                            resultsListEl.insertAdjacentHTML('beforeend', itemHtml);
-                        });
-                    }
-                }
-            } catch (error) {
-                console.error('Batch processing error:', error);
-                failed += pdfBatchData.length;
-            }
-        }
-
-        // Update progress
-        updatePdfProgress(processed, failed, total);
-    }
-
-    // Mark phase as complete
-    document.getElementById('pdfPhaseStatus').textContent = 'Complete';
-    document.getElementById('pdfPhaseStatus').className = 'phase-status completed';
-    document.querySelector('.phase-tab[data-phase="pdf"]').classList.add('completed');
-
-    showProcessingStatus(`PDF processing complete: ${processed} succeeded, ${failed} failed`, 'success');
-}
-
-function updatePdfProgress(processed, failed, total) {
-    const percent = Math.round((processed + failed) / total * 100);
-
-    document.getElementById('pdfProcessed').textContent = processed;
-    document.getElementById('pdfFailed').textContent = failed;
-    document.getElementById('pdfProgressPercent').textContent = `${percent}%`;
-    document.getElementById('pdfProgressFill').style.width = `${percent}%`;
-    document.getElementById('pdfProgressLabel').textContent =
-        `Processing PDFs... (${processed + failed}/${total})`;
-}
-
-// Helper function to convert blob to base64
-function blobToBase64(blob) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-            const base64 = reader.result.split(',')[1];
-            resolve(base64);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
+        container.appendChild(div);
     });
 }
 
-// ============================================
-// Phase 3: Embeddings Processing
-// ============================================
+window.selectScrapeRun = function(path, buttonElement) {
+    adminState.selectedScrapeRun = path;
 
-window.startEmbeddingsProcessing = async function() {
-    if (!processingState.apiConfigured) {
-        showProcessingStatus('Processing API is not configured', 'error');
-        return;
+    // Update all scrape run cards
+    document.querySelectorAll('.scrape-run-card').forEach(card => {
+        card.classList.remove('selected');
+        const btn = card.querySelector('button');
+        if (btn) {
+            btn.className = 'btn btn-small btn-secondary';
+            btn.innerHTML = 'Select';
+        }
+    });
+
+    // Update the clicked card
+    const card = buttonElement.closest('.scrape-run-card');
+    if (card) {
+        card.classList.add('selected');
+        buttonElement.className = 'btn btn-small btn-success';
+        buttonElement.innerHTML = '<i class="fas fa-check"></i> Selected';
     }
 
-    const batchSize = parseInt(document.getElementById('embeddingsBatchSize').value) || 20;
-    const entityTypeFilter = document.getElementById('entityTypeFilter').value;
-    const btn = document.getElementById('startEmbeddingsBtn');
+    // Update refresh description
+    const descEl = document.getElementById('refreshDescription');
+    descEl.textContent = `Will refresh from: ${path}`;
+
+    showAdminStatus(`Selected scrape run: ${path}`, 'success');
+};
+
+// ============================================
+// Refresh from S3
+// ============================================
+
+window.startRefresh = async function() {
+    const btn = document.getElementById('startRefreshBtn');
 
     try {
         btn.disabled = true;
         btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Starting...';
 
-        // Step 1: Start the embeddings job
-        const options = { batchSize };
-        if (entityTypeFilter) {
-            options.entityTypes = [entityTypeFilter];
+        const requestBody = {};
+        if (adminState.selectedScrapeRun) {
+            requestBody.scrapeRunPath = adminState.selectedScrapeRun;
         }
 
-        const startResponse = await fetch(`${API_BASE}/api/processing/embeddings/start`, {
+        const response = await fetch(`${API_BASE}/api/admin/refresh`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
-            body: JSON.stringify({ options })
+            body: JSON.stringify(requestBody)
         });
 
-        const startResult = await startResponse.json();
+        const result = await response.json();
 
-        if (!startResult.success) {
-            throw new Error(startResult.error || 'Failed to start embeddings job');
+        if (response.ok && result.success) {
+            adminState.currentJobId = result.jobId;
+            showAdminStatus(`Refresh started: ${result.jobId}`, 'success');
+
+            // Show current job section and start polling
+            document.getElementById('currentJobSection').style.display = 'block';
+            startJobPolling();
+        } else {
+            throw new Error(result.error || 'Failed to start refresh');
         }
-
-        processingState.jobs.embeddings = startResult.jobId;
-        showProcessingStatus(`Embeddings job started: ${startResult.jobId}`, 'success');
-
-        // Step 2: List entities needing embeddings
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Listing entities...';
-
-        const listResponse = await fetch(
-            `${API_BASE}/api/processing/embeddings/entities?jobId=${startResult.jobId}&limit=1000`,
-            { credentials: 'include' }
-        );
-
-        const listResult = await listResponse.json();
-
-        if (!listResult.success) {
-            throw new Error(listResult.error || 'Failed to list entities');
-        }
-
-        // Display summary
-        displayEntitiesSummary(listResult);
-
-        // Get entities without embeddings
-        const entitiesWithoutEmbeddings = (listResult.entities || []).filter(e => !e.hasEmbedding);
-        processingState.data.entities = entitiesWithoutEmbeddings;
-
-        showProcessingStatus(`Found ${entitiesWithoutEmbeddings.length} entities without embeddings`, 'success');
-
-        // Step 3: Generate embeddings in batches
-        if (entitiesWithoutEmbeddings.length > 0) {
-            await processEmbeddingsBatches(startResult.jobId, batchSize);
-        }
-
     } catch (error) {
-        console.error('Embeddings processing error:', error);
-        showProcessingStatus(`Error: ${error.message}`, 'error');
+        console.error('Failed to start refresh:', error);
+        showAdminStatus(`Error: ${error.message}`, 'error');
     } finally {
         btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-play"></i> Start Processing';
-        await refreshJobList();
+        btn.innerHTML = '<i class="fas fa-play"></i> Start Refresh from S3';
     }
 };
 
-function displayEntitiesSummary(data) {
-    const summaryEl = document.getElementById('entitiesSummary');
-    summaryEl.style.display = 'flex';
+// ============================================
+// Job Status Polling
+// ============================================
 
-    document.getElementById('entitiesWithEmbeddings').textContent = data.withEmbeddings || 0;
-    document.getElementById('entitiesWithoutEmbeddings').textContent = data.withoutEmbeddings || 0;
-}
-
-async function processEmbeddingsBatches(jobId, batchSize) {
-    const entities = processingState.data.entities;
-    const total = entities.length;
-
-    // Show progress
-    const progressEl = document.getElementById('embeddingsProgress');
-    const resultsEl = document.getElementById('embeddingsResults');
-    const resultsListEl = document.getElementById('embeddingsResultsList');
-
-    progressEl.style.display = 'block';
-    resultsEl.style.display = 'block';
-    resultsListEl.innerHTML = '';
-
-    document.getElementById('embeddingsTotal').textContent = total;
-
-    let processed = 0;
-    let failed = 0;
-
-    for (let i = 0; i < total; i += batchSize) {
-        const batch = entities.slice(i, i + batchSize);
-        const entityNames = batch.map(e => e.name);
-
-        try {
-            const response = await fetch(`${API_BASE}/api/processing/embeddings/batch`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify({
-                    jobId,
-                    entityNames
-                })
-            });
-
-            const result = await response.json();
-
-            if (result.success) {
-                processed += result.processed || 0;
-                failed += result.failed || 0;
-
-                // Add results to list (show first few)
-                if (result.results && resultsListEl.children.length < 50) {
-                    result.results.slice(0, 5).forEach(r => {
-                        const itemHtml = `
-                            <div class="result-item ${r.success ? 'success' : 'error'}">
-                                <i class="fas fa-${r.success ? 'check-circle' : 'times-circle'}"></i>
-                                <span class="result-name">${r.entityName}</span>
-                                <span class="result-stats">${r.success ? `${r.dimensions}d` : r.error || 'Failed'}</span>
-                            </div>
-                        `;
-                        resultsListEl.insertAdjacentHTML('beforeend', itemHtml);
-                    });
-                }
-            }
-        } catch (error) {
-            console.error('Batch processing error:', error);
-            failed += batch.length;
-        }
-
-        // Update progress
-        updateEmbeddingsProgress(processed, failed, total);
+function startJobPolling() {
+    // Clear any existing polling
+    if (adminState.pollingInterval) {
+        clearInterval(adminState.pollingInterval);
     }
 
-    // Mark phase as complete
-    document.getElementById('embeddingsPhaseStatus').textContent = 'Complete';
-    document.getElementById('embeddingsPhaseStatus').className = 'phase-status completed';
-    document.querySelector('.phase-tab[data-phase="embeddings"]').classList.add('completed');
+    // Poll every 2 seconds
+    adminState.pollingInterval = setInterval(async () => {
+        await checkCurrentJob();
+    }, 2000);
 
-    showProcessingStatus(`Embeddings generation complete: ${processed} succeeded, ${failed} failed`, 'success');
+    // Also check immediately
+    checkCurrentJob();
 }
 
-function updateEmbeddingsProgress(processed, failed, total) {
-    const percent = Math.round((processed + failed) / total * 100);
-
-    document.getElementById('embeddingsProcessed').textContent = processed;
-    document.getElementById('embeddingsFailed').textContent = failed;
-    document.getElementById('embeddingsProgressPercent').textContent = `${percent}%`;
-    document.getElementById('embeddingsProgressFill').style.width = `${percent}%`;
-    document.getElementById('embeddingsProgressLabel').textContent =
-        `Generating embeddings... (${processed + failed}/${total})`;
+function stopJobPolling() {
+    if (adminState.pollingInterval) {
+        clearInterval(adminState.pollingInterval);
+        adminState.pollingInterval = null;
+    }
 }
 
-// ============================================
-// Job Management
-// ============================================
-
-async function refreshJobList() {
-    const jobList = document.getElementById('jobList');
-
+async function checkCurrentJob() {
     try {
-        const response = await fetch(`${API_BASE}/api/processing/jobs`, {
+        const response = await fetch(`${API_BASE}/api/admin/refresh/status`, {
             credentials: 'include'
         });
 
         const result = await response.json();
 
-        if (result.success && result.jobs && result.jobs.length > 0) {
-            jobList.innerHTML = result.jobs.map(job => `
-                <div class="job-item">
-                    <span class="job-type ${job.type}">${job.type}</span>
-                    <div class="job-info">
-                        <div class="job-id">${job.id}</div>
-                        <div class="job-progress-text">
-                            ${job.progress ? `${job.progress.processed}/${job.progress.total} (${job.progress.percentage}%)` : 'Starting...'}
-                        </div>
-                    </div>
-                    <span class="job-status ${job.status}">${job.status}</span>
-                    <div class="job-actions">
-                        ${job.status === 'running' ? `
-                            <button type="button" class="btn btn-small btn-secondary" onclick="cancelJob('${job.id}')">
-                                <i class="fas fa-stop"></i>
-                            </button>
-                        ` : ''}
-                    </div>
-                </div>
-            `).join('');
+        if (response.ok && result.success && result.job) {
+            updateJobDisplay(result.job);
+
+            // Stop polling if job is complete or failed
+            if (result.job.status === 'completed' || result.job.status === 'failed' || result.job.status === 'cancelled') {
+                stopJobPolling();
+
+                // Refresh stats after job completes
+                await loadAdminStats();
+            }
         } else {
-            jobList.innerHTML = '<div class="status-info">No active jobs</div>';
+            // No active job
+            document.getElementById('currentJobSection').style.display = 'none';
+            stopJobPolling();
         }
     } catch (error) {
-        console.error('Failed to refresh job list:', error);
+        console.error('Failed to check job status:', error);
     }
 }
 
-window.cancelJob = async function(jobId) {
-    if (!confirm('Are you sure you want to cancel this job?')) {
+function updateJobDisplay(job) {
+    const section = document.getElementById('currentJobSection');
+    section.style.display = 'block';
+
+    // Update phase badge
+    const phaseBadge = document.getElementById('jobPhaseBadge');
+    phaseBadge.textContent = job.phase || job.status || 'Processing';
+    phaseBadge.className = `job-phase-badge ${job.status}`;
+
+    // Update message
+    document.getElementById('jobMessage').textContent = job.message || '';
+
+    // Update progress bar
+    const progress = job.progress || 0;
+    document.getElementById('jobProgressFill').style.width = `${progress}%`;
+
+    // Update job details
+    document.getElementById('jobId').textContent = job.id || adminState.currentJobId || '--';
+    document.getElementById('jobStarted').textContent = job.startedAt
+        ? new Date(job.startedAt).toLocaleTimeString()
+        : '--';
+
+    // Show/hide spinner based on status
+    const spinner = document.getElementById('jobSpinner');
+    if (job.status === 'running' || job.status === 'processing') {
+        spinner.style.display = 'block';
+    } else {
+        spinner.style.display = 'none';
+    }
+
+    // Handle error display
+    const errorEl = document.getElementById('jobError');
+    if (job.error) {
+        errorEl.style.display = 'block';
+        errorEl.textContent = job.error;
+    } else {
+        errorEl.style.display = 'none';
+    }
+
+    // Handle results display
+    const resultsEl = document.getElementById('jobResults');
+    const resultsList = document.getElementById('jobResultsList');
+    if (job.results && Object.keys(job.results).length > 0) {
+        resultsEl.style.display = 'block';
+        resultsList.innerHTML = '';
+        for (const [key, value] of Object.entries(job.results)) {
+            const li = document.createElement('li');
+            li.textContent = `${key}: ${value}`;
+            resultsList.appendChild(li);
+        }
+    } else {
+        resultsEl.style.display = 'none';
+    }
+}
+
+window.cancelCurrentJob = async function() {
+    if (!adminState.currentJobId) {
+        showAdminStatus('No active job to cancel', 'warning');
+        return;
+    }
+
+    if (!confirm('Are you sure you want to cancel the current job?')) {
         return;
     }
 
     try {
-        const response = await fetch(`${API_BASE}/api/processing/jobs/${jobId}`, {
+        const response = await fetch(`${API_BASE}/api/admin/refresh/jobs/${adminState.currentJobId}`, {
             method: 'DELETE',
             credentials: 'include'
         });
 
         const result = await response.json();
 
-        if (result.success) {
-            showProcessingStatus('Job cancelled', 'success');
-            await refreshJobList();
+        if (response.ok && result.success) {
+            showAdminStatus('Job cancelled', 'success');
+            stopJobPolling();
+            document.getElementById('currentJobSection').style.display = 'none';
+            adminState.currentJobId = null;
         } else {
-            showProcessingStatus(`Failed to cancel job: ${result.error}`, 'error');
+            showAdminStatus(`Failed to cancel job: ${result.error}`, 'error');
         }
     } catch (error) {
-        showProcessingStatus(`Error: ${error.message}`, 'error');
+        showAdminStatus(`Error: ${error.message}`, 'error');
     }
 };
 
 // ============================================
-// Processing Status Messages
+// Database Reset
 // ============================================
 
-function showProcessingStatus(message, type = 'info') {
-    const statusElement = document.getElementById('processingStatusMessage');
+async function loadResetPreview() {
+    const previewEl = document.getElementById('resetPreview');
+
+    try {
+        const response = await fetch(`${API_BASE}/api/admin/reset/preview`, {
+            credentials: 'include'
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            previewEl.innerHTML = `
+                <p class="warning-text"><i class="fas fa-exclamation-triangle"></i> This will delete:</p>
+                <ul class="reset-list">
+                    <li><strong>${formatNumber(result.entities || 0)}</strong> entities from Neo4j</li>
+                    <li><strong>${formatNumber(result.relationships || 0)}</strong> relationships from Neo4j</li>
+                    <li><strong>${formatNumber(result.embeddings || 0)}</strong> embeddings from PostgreSQL</li>
+                </ul>
+                <p class="backup-note"><i class="fas fa-shield-alt"></i> A backup will be created automatically before reset.</p>
+            `;
+        } else {
+            previewEl.innerHTML = '<p class="warning-text">Unable to load preview</p>';
+        }
+    } catch (error) {
+        console.error('Failed to load reset preview:', error);
+        previewEl.innerHTML = '<p class="warning-text">Error loading preview</p>';
+    }
+}
+
+window.showResetConfirm = function() {
+    document.getElementById('resetConfirmModal').style.display = 'flex';
+};
+
+window.closeResetModal = function() {
+    document.getElementById('resetConfirmModal').style.display = 'none';
+};
+
+window.confirmReset = async function() {
+    const btn = document.querySelector('#resetConfirmModal .btn-danger');
+
+    try {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Resetting...';
+
+        const response = await fetch(`${API_BASE}/api/admin/reset`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-admin-confirm': 'true'
+            },
+            credentials: 'include'
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            closeResetModal();
+            showAdminStatus('Database reset complete. Backup created.', 'success');
+
+            // Refresh all admin data
+            await refreshAdminStatus();
+            await loadResetPreview();
+        } else {
+            throw new Error(result.error || 'Reset failed');
+        }
+    } catch (error) {
+        console.error('Reset failed:', error);
+        showAdminStatus(`Reset failed: ${error.message}`, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-trash-alt"></i> Yes, Reset Everything';
+    }
+};
+
+// ============================================
+// Admin Status Messages
+// ============================================
+
+function showAdminStatus(message, type = 'info') {
+    const statusElement = document.getElementById('adminStatusMessage');
     statusElement.textContent = message;
     statusElement.className = `status-indicator status-${type}`;
     statusElement.style.display = 'block';
@@ -1699,6 +1354,7 @@ function showProcessingStatus(message, type = 'info') {
 // Export for global access
 // ============================================
 
+// Document management exports
 window.refreshFolderTree = refreshFolderTree;
 window.navigateToFolder = navigateToFolder;
 window.toggleFileSelection = toggleFileSelection;
@@ -1716,3 +1372,12 @@ window.createFolderPrompt = createFolderPrompt;
 window.closeCreateFolderModal = closeCreateFolderModal;
 window.confirmCreateFolder = confirmCreateFolder;
 window.deleteCurrentFolder = deleteCurrentFolder;
+
+// Admin tab exports
+window.refreshAdminStatus = refreshAdminStatus;
+window.selectScrapeRun = selectScrapeRun;
+window.startRefresh = startRefresh;
+window.cancelCurrentJob = cancelCurrentJob;
+window.showResetConfirm = showResetConfirm;
+window.closeResetModal = closeResetModal;
+window.confirmReset = confirmReset;
