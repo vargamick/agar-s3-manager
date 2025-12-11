@@ -1429,13 +1429,18 @@ body {
     color: #ef6c00;
 }
 
-.status-info .status-label {
+.status-card .status-info {
+    padding: 0;
+    text-align: left;
+}
+
+.status-card .status-info .status-label {
     display: block;
     font-size: var(--font-size-sm);
     color: var(--text-muted);
 }
 
-.status-info .status-value {
+.status-card .status-info .status-value {
     display: block;
     font-weight: 600;
     color: var(--text-primary);
