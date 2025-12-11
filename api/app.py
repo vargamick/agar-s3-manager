@@ -1,6 +1,6 @@
 """
-Agar S3 Manager API Server
-A minimal Flask API for S3 document management.
+Ask Agar Processor API Server
+Flask API for S3 document management and data processing pipeline.
 """
 
 import os
@@ -13,6 +13,10 @@ from routes.health import health_bp
 from routes.s3_management import s3_bp
 from routes.processing import processing_bp
 
+# Initialize logging at module level for Gunicorn
+os.makedirs('logs', exist_ok=True)
+setup_logging()
+
 
 def create_app():
     """Create and configure Flask application."""
@@ -20,9 +24,6 @@ def create_app():
 
     # Configure CORS
     CORS(app, origins="*")
-
-    # Set up logging
-    setup_logging()
 
     # Register blueprints
     app.register_blueprint(health_bp, url_prefix='/api/health')
@@ -34,8 +35,8 @@ def create_app():
     def root():
         """Root endpoint with API information."""
         return jsonify({
-            'service': 'Agar S3 Manager API',
-            'version': '1.0.0',
+            'service': 'Ask Agar Processor API',
+            'version': '2.0.0',
             'endpoints': {
                 'health': '/api/health/',
                 's3_documents': '/api/s3/documents',
@@ -64,7 +65,7 @@ def main():
     os.makedirs('logs', exist_ok=True)
     app = create_app()
 
-    logger.info(f"Starting Agar S3 Manager API on port {Config.API_PORT}")
+    logger.info(f"Starting Ask Agar Processor API on port {Config.API_PORT}")
     logger.info(f"S3 Bucket: {Config.S3_BUCKET_NAME}")
     logger.info(f"AWS Region: {Config.AWS_REGION}")
 
