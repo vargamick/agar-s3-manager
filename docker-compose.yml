@@ -10,6 +10,7 @@ services:
     build:
       context: ./api
       dockerfile: Dockerfile
+    container_name: api-server
     restart: unless-stopped
     expose:
       - "3500"
@@ -27,6 +28,9 @@ services:
       - api-logs:/app/logs
     networks:
       - s3-manager-network
+      - coolify
+    labels:
+      - "traefik.enable=false"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3500/api/health/"]
       interval: 30s
@@ -39,6 +43,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+    container_name: processor-frontend
     restart: unless-stopped
     expose:
       - "80"
