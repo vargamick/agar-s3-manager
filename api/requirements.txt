@@ -11,5 +11,8 @@ botocore==1.34.0
 # Logging
 loguru==0.7.2
 
+# HTTP Client for API proxying
+requests==2.31.0
+
 # WSGI Server (optional, for production)
 gunicorn==21.2.0

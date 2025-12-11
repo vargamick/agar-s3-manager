@@ -11,6 +11,7 @@ from loguru import logger
 from config import Config, setup_logging
 from routes.health import health_bp
 from routes.s3_management import s3_bp
+from routes.processing import processing_bp
 
 
 def create_app():
@@ -26,6 +27,7 @@ def create_app():
     # Register blueprints
     app.register_blueprint(health_bp, url_prefix='/api/health')
     app.register_blueprint(s3_bp, url_prefix='/api/s3')
+    app.register_blueprint(processing_bp, url_prefix='/api/processing')
 
     # Root endpoint
     @app.route('/')
@@ -38,7 +40,8 @@ def create_app():
                 'health': '/api/health/',
                 's3_documents': '/api/s3/documents',
                 's3_folders': '/api/s3/folders',
-                's3_tree': '/api/s3/structure/tree'
+                's3_tree': '/api/s3/structure/tree',
+                'processing': '/api/processing/'
             }
         })
 

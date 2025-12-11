@@ -25,6 +25,10 @@ class Config:
     # Logging Configuration
     LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
 
+    # Memento Processing API Configuration
+    MEMENTO_API_URL = os.getenv('MEMENTO_API_URL', 'https://api.askagar.3dn.com.au/api/v1')
+    MEMENTO_API_KEY = os.getenv('MEMENTO_API_KEY', '')
+
     @classmethod
     def validate_s3_config(cls) -> bool:
         """Validate S3 configuration is complete."""

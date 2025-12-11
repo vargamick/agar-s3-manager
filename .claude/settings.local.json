@@ -2,7 +2,20 @@
   "permissions": {
     "allow": [
       "Bash(ssh:*)",
-      "Bash(rsync:*)"
+      "Bash(rsync:*)",
+      "Bash(curl:*)",
+      "Bash(grep:*)",
+      "Bash(cat:*)",
+      "Bash(python3:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(host:*)",
+      "Bash(nslookup:*)",
+      "Bash(dig:*)",
+      "Bash(find:*)",
+      "Bash(git -C /Users/mick/AI/agar-s3-manager log --oneline)",
+      "Bash(git -C /Users/mick/AI/agar-s3-manager status)"
     ]
   }
 }

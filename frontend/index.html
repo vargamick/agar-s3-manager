@@ -27,9 +27,20 @@
             </div>
         </header>
 
+        <!-- Tab Navigation -->
+        <nav class="tab-navigation">
+            <button type="button" class="tab-btn active" data-tab="documents" onclick="switchTab('documents')">
+                <i class="fas fa-folder"></i> Documents
+            </button>
+            <button type="button" class="tab-btn" data-tab="processing" onclick="switchTab('processing')">
+                <i class="fas fa-cogs"></i> Processing
+            </button>
+        </nav>
+
         <!-- Main Content -->
         <main class="main-content">
             <!-- Document Manager Panel -->
+            <div id="documentsTab" class="tab-content active">
             <div class="document-manager-panel">
                 <div class="panel-header">
                     <div class="header-left">
@@ -135,6 +146,225 @@
                 <!-- Status Display -->
                 <div id="statusMessage" class="status-indicator" style="display: none;"></div>
             </div>
+            </div> <!-- End documentsTab -->
+
+            <!-- Processing Tab -->
+            <div id="processingTab" class="tab-content">
+                <div class="processing-panel">
+                    <!-- Processing Header -->
+                    <div class="panel-header">
+                        <div class="header-left">
+                            <i class="fas fa-cogs"></i> Data Processing Pipeline
+                        </div>
+                        <div class="header-right">
+                            <span id="processingApiStatus" class="api-status">
+                                <i class="fas fa-circle"></i> Checking API...
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Processing Content -->
+                    <div class="processing-content">
+                        <!-- Scrape Run Selector -->
+                        <div class="processing-section">
+                            <h3><i class="fas fa-database"></i> Select Scrape Run</h3>
+                            <div class="scrape-run-selector">
+                                <div class="form-group">
+                                    <label for="scrapeRunPath">Scrape Run Path:</label>
+                                    <div class="input-with-btn">
+                                        <input type="text" id="scrapeRunPath" class="form-control"
+                                               placeholder="e.g., agar/20251119_015555_..." readonly>
+                                        <button type="button" class="btn btn-secondary" onclick="openScrapeRunSelector()">
+                                            <i class="fas fa-folder-open"></i> Browse
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Phase Tabs -->
+                        <div class="phase-tabs">
+                            <button type="button" class="phase-tab active" data-phase="metadata" onclick="switchPhase('metadata')">
+                                <span class="phase-number">1</span>
+                                <span class="phase-name">Metadata</span>
+                                <span class="phase-status" id="metadataPhaseStatus"></span>
+                            </button>
+                            <button type="button" class="phase-tab" data-phase="pdf" onclick="switchPhase('pdf')">
+                                <span class="phase-number">2</span>
+                                <span class="phase-name">PDF Processing</span>
+                                <span class="phase-status" id="pdfPhaseStatus"></span>
+                            </button>
+                            <button type="button" class="phase-tab" data-phase="embeddings" onclick="switchPhase('embeddings')">
+                                <span class="phase-number">3</span>
+                                <span class="phase-name">Embeddings</span>
+                                <span class="phase-status" id="embeddingsPhaseStatus"></span>
+                            </button>
+                        </div>
+
+                        <!-- Phase Content Panels -->
+                        <div class="phase-panels">
+                            <!-- Phase 1: Metadata Processing -->
+                            <div id="metadataPhase" class="phase-panel active">
+                                <div class="phase-header">
+                                    <h4>Metadata Processing</h4>
+                                    <p>Convert JSON product metadata into graph entities and relationships</p>
+                                </div>
+
+                                <div class="phase-controls">
+                                    <div class="control-row">
+                                        <div class="form-group">
+                                            <label for="metadataBatchSize">Batch Size:</label>
+                                            <input type="number" id="metadataBatchSize" class="form-control-small" value="10" min="1" max="50">
+                                        </div>
+                                        <button type="button" class="btn btn-primary" id="startMetadataBtn" onclick="startMetadataProcessing()">
+                                            <i class="fas fa-play"></i> Start Processing
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="phase-progress" id="metadataProgress" style="display: none;">
+                                    <div class="progress-header">
+                                        <span id="metadataProgressLabel">Processing products...</span>
+                                        <span id="metadataProgressPercent">0%</span>
+                                    </div>
+                                    <div class="progress-bar">
+                                        <div class="progress-fill" id="metadataProgressFill"></div>
+                                    </div>
+                                    <div class="progress-stats">
+                                        <span>Processed: <strong id="metadataProcessed">0</strong></span>
+                                        <span>Failed: <strong id="metadataFailed">0</strong></span>
+                                        <span>Total: <strong id="metadataTotal">0</strong></span>
+                                    </div>
+                                </div>
+
+                                <div class="phase-results" id="metadataResults" style="display: none;">
+                                    <h5>Results</h5>
+                                    <div class="results-list" id="metadataResultsList"></div>
+                                </div>
+                            </div>
+
+                            <!-- Phase 2: PDF Processing -->
+                            <div id="pdfPhase" class="phase-panel">
+                                <div class="phase-header">
+                                    <h4>PDF Processing</h4>
+                                    <p>Extract content from PDF documents and create document chunks</p>
+                                </div>
+
+                                <div class="phase-controls">
+                                    <div class="control-row">
+                                        <div class="form-group">
+                                            <label for="pdfBatchSize">Batch Size:</label>
+                                            <input type="number" id="pdfBatchSize" class="form-control-small" value="5" min="1" max="20">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="chunkSize">Chunk Size:</label>
+                                            <input type="number" id="chunkSize" class="form-control-small" value="1000" min="100" max="5000">
+                                        </div>
+                                        <button type="button" class="btn btn-primary" id="startPdfBtn" onclick="startPdfProcessing()">
+                                            <i class="fas fa-play"></i> Start Processing
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="phase-progress" id="pdfProgress" style="display: none;">
+                                    <div class="progress-header">
+                                        <span id="pdfProgressLabel">Processing PDFs...</span>
+                                        <span id="pdfProgressPercent">0%</span>
+                                    </div>
+                                    <div class="progress-bar">
+                                        <div class="progress-fill" id="pdfProgressFill"></div>
+                                    </div>
+                                    <div class="progress-stats">
+                                        <span>Processed: <strong id="pdfProcessed">0</strong></span>
+                                        <span>Failed: <strong id="pdfFailed">0</strong></span>
+                                        <span>Total: <strong id="pdfTotal">0</strong></span>
+                                    </div>
+                                </div>
+
+                                <div class="pdf-list-container" id="pdfListContainer" style="display: none;">
+                                    <h5>PDFs to Process (<span id="pdfCount">0</span>)</h5>
+                                    <div class="pdf-list" id="pdfList"></div>
+                                </div>
+
+                                <div class="phase-results" id="pdfResults" style="display: none;">
+                                    <h5>Results</h5>
+                                    <div class="results-list" id="pdfResultsList"></div>
+                                </div>
+                            </div>
+
+                            <!-- Phase 3: Embeddings -->
+                            <div id="embeddingsPhase" class="phase-panel">
+                                <div class="phase-header">
+                                    <h4>Embedding Generation</h4>
+                                    <p>Generate vector embeddings for entities</p>
+                                </div>
+
+                                <div class="phase-controls">
+                                    <div class="control-row">
+                                        <div class="form-group">
+                                            <label for="embeddingsBatchSize">Batch Size:</label>
+                                            <input type="number" id="embeddingsBatchSize" class="form-control-small" value="20" min="1" max="100">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="entityTypeFilter">Entity Types:</label>
+                                            <select id="entityTypeFilter" class="form-control-small">
+                                                <option value="">All Types</option>
+                                                <option value="Product">Product</option>
+                                                <option value="DocumentChunk">DocumentChunk</option>
+                                            </select>
+                                        </div>
+                                        <button type="button" class="btn btn-primary" id="startEmbeddingsBtn" onclick="startEmbeddingsProcessing()">
+                                            <i class="fas fa-play"></i> Start Processing
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="phase-progress" id="embeddingsProgress" style="display: none;">
+                                    <div class="progress-header">
+                                        <span id="embeddingsProgressLabel">Generating embeddings...</span>
+                                        <span id="embeddingsProgressPercent">0%</span>
+                                    </div>
+                                    <div class="progress-bar">
+                                        <div class="progress-fill" id="embeddingsProgressFill"></div>
+                                    </div>
+                                    <div class="progress-stats">
+                                        <span>Processed: <strong id="embeddingsProcessed">0</strong></span>
+                                        <span>Failed: <strong id="embeddingsFailed">0</strong></span>
+                                        <span>Total: <strong id="embeddingsTotal">0</strong></span>
+                                    </div>
+                                </div>
+
+                                <div class="entities-summary" id="entitiesSummary" style="display: none;">
+                                    <div class="summary-card">
+                                        <span class="summary-label">With Embeddings</span>
+                                        <span class="summary-value" id="entitiesWithEmbeddings">0</span>
+                                    </div>
+                                    <div class="summary-card">
+                                        <span class="summary-label">Without Embeddings</span>
+                                        <span class="summary-value" id="entitiesWithoutEmbeddings">0</span>
+                                    </div>
+                                </div>
+
+                                <div class="phase-results" id="embeddingsResults" style="display: none;">
+                                    <h5>Results</h5>
+                                    <div class="results-list" id="embeddingsResultsList"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Job History -->
+                        <div class="processing-section job-history-section">
+                            <h3><i class="fas fa-history"></i> Active Jobs</h3>
+                            <div class="job-list" id="jobList">
+                                <div class="status-info">No active jobs</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Processing Status Display -->
+                    <div id="processingStatusMessage" class="status-indicator" style="display: none;"></div>
+                </div>
+            </div> <!-- End processingTab -->
         </main>
 
         <!-- Footer -->
@@ -191,6 +421,32 @@
                 <div class="processing-status" id="moveProcessingStatus" style="display: none;">
                     <div class="spinner"></div>
                     <div class="status-text">Moving files...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scrape Run Selector Modal -->
+    <div id="scrapeRunModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-database"></i> Select Scrape Run</h3>
+                <span class="close" onclick="closeScrapeRunModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="scrape-run-browser">
+                    <div class="folder-tree-container" id="scrapeRunFolderTree">
+                        <div class="status-info">Loading scrape runs...</div>
+                    </div>
+                </div>
+                <div class="selected-scrape-run" id="selectedScrapeRun" style="display: none;">
+                    <p><strong>Selected:</strong> <span id="selectedScrapeRunPath"></span></p>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-success" onclick="confirmScrapeRunSelection()" id="selectScrapeRunBtn" disabled>
+                        <i class="fas fa-check"></i> Select
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="closeScrapeRunModal()">Cancel</button>
                 </div>
             </div>
         </div>

@@ -21,6 +21,8 @@ services:
       - AWS_S3_SECRET_ACCESS_KEY=${AWS_S3_SECRET_ACCESS_KEY}
       - S3_BUCKET_NAME=${S3_BUCKET_NAME:-agar-documentation}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - MEMENTO_API_URL=${MEMENTO_API_URL:-https://api.askagar.3dn.com.au/api/v1}
+      - MEMENTO_API_KEY=${MEMENTO_API_KEY}
     volumes:
       - api-logs:/app/logs
     networks:
