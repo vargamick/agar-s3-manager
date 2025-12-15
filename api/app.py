@@ -23,8 +23,13 @@ def create_app():
     """Create and configure Flask application."""
     app = Flask(__name__)
 
-    # Configure CORS
-    CORS(app, origins="*")
+    # Configure CORS - allow all origins
+    # Note: Since requests come through nginx proxy, they appear as same-origin
+    # We use permissive CORS in case of direct API access
+    CORS(app,
+         resources={r"/api/*": {"origins": "*"}},
+         allow_headers=["Content-Type", "Authorization", "x-api-key", "x-admin-confirm"],
+         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 
     # Register blueprints
     app.register_blueprint(health_bp, url_prefix='/api/health')
