@@ -76,7 +76,6 @@ async function checkApiConnection() {
 
     try {
         const response = await fetch(`${API_BASE}/health`, {
-            credentials: 'include',
             cache: 'no-cache'
         });
 
@@ -108,7 +107,6 @@ async function loadFolderTree() {
         folderTree.innerHTML = '<div class="status-info"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
 
         const response = await fetch(`${API_BASE}/api/s3/structure/tree?_cb=${Date.now()}`, {
-            credentials: 'include',
             cache: 'no-cache'
         });
 
@@ -228,9 +226,7 @@ async function loadFilesInFolder(folderPath) {
     try {
         fileListContainer.innerHTML = '<div class="status-info"><i class="fas fa-spinner fa-spin"></i> Loading files...</div>';
 
-        const response = await fetch(`${API_BASE}/api/s3/folder/contents?folder_path=${encodeURIComponent(folderPath)}`, {
-            credentials: 'include'
-        });
+        const response = await fetch(`${API_BASE}/api/s3/folder/contents?folder_path=${encodeURIComponent(folderPath)}`);
 
         const result = await response.json();
 
@@ -473,8 +469,7 @@ async function handleFileUpload(event) {
 
             const response = await fetch(`${API_BASE}/api/s3/documents`, {
                 method: 'POST',
-                body: formData,
-                credentials: 'include'
+                body: formData
             });
 
             if (response.ok) {
@@ -521,8 +516,7 @@ async function handleFolderUpload(event) {
 
         const response = await fetch(`${API_BASE}/api/s3/upload/folder`, {
             method: 'POST',
-            body: formData,
-            credentials: 'include'
+            body: formData
         });
 
         const result = await response.json();
@@ -577,9 +571,7 @@ window.downloadSelectedFiles = async function() {
 
     for (const fileKey of selectedFiles) {
         try {
-            const response = await fetch(`${API_BASE}/api/s3/download?key=${encodeURIComponent(fileKey)}`, {
-                credentials: 'include'
-            });
+            const response = await fetch(`${API_BASE}/api/s3/download?key=${encodeURIComponent(fileKey)}`);
 
             if (response.ok) {
                 const blob = await response.blob();
@@ -615,8 +607,7 @@ window.deleteSelectedFiles = async function() {
     for (const fileKey of selectedFiles) {
         try {
             const response = await fetch(`${API_BASE}/api/s3/documents/${encodeURIComponent(fileKey)}`, {
-                method: 'DELETE',
-                credentials: 'include'
+                method: 'DELETE'
             });
 
             if (response.ok) {
@@ -660,8 +651,7 @@ window.confirmCreateFolder = async function() {
         const response = await fetch(`${API_BASE}/api/s3/folders`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ folder_path: folderPath }),
-            credentials: 'include'
+            body: JSON.stringify({ folder_path: folderPath })
         });
 
         if (response.ok) {
@@ -690,8 +680,7 @@ window.deleteCurrentFolder = async function() {
 
     try {
         const response = await fetch(`${API_BASE}/api/s3/folders/${encodeURIComponent(currentFolderPath)}`, {
-            method: 'DELETE',
-            credentials: 'include'
+            method: 'DELETE'
         });
 
         if (response.ok) {
@@ -791,8 +780,7 @@ window.createFolderForMove = async function() {
         const response = await fetch(`${API_BASE}/api/s3/folders`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ folder_path: folderPath }),
-            credentials: 'include'
+            body: JSON.stringify({ folder_path: folderPath })
         });
 
         if (response.ok) {
@@ -828,8 +816,7 @@ window.confirmMoveFiles = async function() {
                 body: JSON.stringify({
                     source_key: fileKey,
                     destination_key: newKey
-                }),
-                credentials: 'include'
+                })
             });
 
             if (response.ok) {
@@ -913,13 +900,11 @@ async function refreshAdminStatus() {
 
     try {
         // Check admin health
-        const response = await fetch(`${API_BASE}/api/admin/health`, {
-            credentials: 'include'
-        });
+        const response = await fetch(`${API_BASE}/api/admin/health`);
 
         const result = await response.json();
 
-        if (response.ok && result.success) {
+        if (response.ok && (result.healthy || result.success)) {
             statusElement.innerHTML = '<i class="fas fa-circle"></i> API Connected';
             statusElement.className = 'api-status connected';
 
@@ -959,17 +944,16 @@ function updateServiceStatus(elementId, status) {
 
 async function loadAdminStats() {
     try {
-        const response = await fetch(`${API_BASE}/api/admin/stats`, {
-            credentials: 'include'
-        });
+        const response = await fetch(`${API_BASE}/api/admin/stats`);
 
         const result = await response.json();
 
-        if (response.ok && result.success) {
-            document.getElementById('statEntities').textContent = formatNumber(result.entities || 0);
-            document.getElementById('statRelationships').textContent = formatNumber(result.relationships || 0);
-            document.getElementById('statEmbeddings').textContent = formatNumber(result.embeddings || 0);
-            document.getElementById('statLabels').textContent = formatNumber(result.labels || 0);
+        if (response.ok && result.data) {
+            const data = result.data;
+            document.getElementById('statEntities').textContent = formatNumber(data.neo4j?.entities || 0);
+            document.getElementById('statRelationships').textContent = formatNumber(data.neo4j?.relationships || 0);
+            document.getElementById('statEmbeddings').textContent = formatNumber(data.postgres?.embeddings || 0);
+            document.getElementById('statLabels').textContent = formatNumber(data.neo4j?.labels?.length || 0);
         }
     } catch (error) {
         console.error('Failed to load admin stats:', error);
@@ -994,14 +978,12 @@ async function loadScrapeRuns() {
     container.innerHTML = '<div class="status-info"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
 
     try {
-        const response = await fetch(`${API_BASE}/api/admin/s3/scrape-runs`, {
-            credentials: 'include'
-        });
+        const response = await fetch(`${API_BASE}/api/admin/s3/scrape-runs`);
 
         const result = await response.json();
 
-        if (response.ok && result.success && result.runs && result.runs.length > 0) {
-            renderScrapeRuns(result.runs);
+        if (response.ok && result.data && result.data.length > 0) {
+            renderScrapeRuns(result.data);
         } else {
             container.innerHTML = '<div class="status-info">No scrape runs found</div>';
         }
@@ -1022,15 +1004,15 @@ function renderScrapeRuns(runs) {
             div.classList.add('selected');
         }
 
-        const runDate = run.date ? new Date(run.date).toLocaleDateString() : 'Unknown';
+        const runDate = run.timestamp ? new Date(run.timestamp).toLocaleDateString() : 'Unknown';
         const runType = run.type || 'FULL';
-        const productCount = run.productCount || 0;
+        const pdfCount = run.files?.pdfCount || 0;
 
         div.innerHTML = `
             <div class="scrape-run-info">
                 <span class="scrape-run-type ${runType.toLowerCase()}">${runType}</span>
-                <span class="scrape-run-name">${run.name || run.path}</span>
-                <span class="scrape-run-meta">${runDate} | ${productCount} products</span>
+                <span class="scrape-run-name">${run.runId || run.path}</span>
+                <span class="scrape-run-meta">${runDate} | ${pdfCount} PDFs | ${run.sizeFormatted || ''}</span>
             </div>
             <button class="btn btn-small ${adminState.selectedScrapeRun === run.path ? 'btn-success' : 'btn-secondary'}"
                     onclick="selectScrapeRun('${run.path}', this)">
@@ -1089,15 +1071,14 @@ window.startRefresh = async function() {
         const response = await fetch(`${API_BASE}/api/admin/refresh`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
             body: JSON.stringify(requestBody)
         });
 
         const result = await response.json();
 
-        if (response.ok && result.success) {
-            adminState.currentJobId = result.jobId;
-            showAdminStatus(`Refresh started: ${result.jobId}`, 'success');
+        if (response.ok && (result.data || result.jobId)) {
+            adminState.currentJobId = result.data?.jobId || result.jobId;
+            showAdminStatus(`Refresh started: ${adminState.currentJobId}`, 'success');
 
             // Show current job section and start polling
             document.getElementById('currentJobSection').style.display = 'block';
@@ -1142,17 +1123,15 @@ function stopJobPolling() {
 
 async function checkCurrentJob() {
     try {
-        const response = await fetch(`${API_BASE}/api/admin/refresh/status`, {
-            credentials: 'include'
-        });
+        const response = await fetch(`${API_BASE}/api/admin/refresh/status`);
 
         const result = await response.json();
 
-        if (response.ok && result.success && result.job) {
-            updateJobDisplay(result.job);
+        if (response.ok && result.data) {
+            updateJobDisplay(result.data);
 
             // Stop polling if job is complete or failed
-            if (result.job.status === 'completed' || result.job.status === 'failed' || result.job.status === 'cancelled') {
+            if (result.data.status === 'completed' || result.data.status === 'failed' || result.data.status === 'cancelled') {
                 stopJobPolling();
 
                 // Refresh stats after job completes
@@ -1235,19 +1214,18 @@ window.cancelCurrentJob = async function() {
 
     try {
         const response = await fetch(`${API_BASE}/api/admin/refresh/jobs/${adminState.currentJobId}`, {
-            method: 'DELETE',
-            credentials: 'include'
+            method: 'DELETE'
         });
 
         const result = await response.json();
 
-        if (response.ok && result.success) {
+        if (response.ok) {
             showAdminStatus('Job cancelled', 'success');
             stopJobPolling();
             document.getElementById('currentJobSection').style.display = 'none';
             adminState.currentJobId = null;
         } else {
-            showAdminStatus(`Failed to cancel job: ${result.error}`, 'error');
+            showAdminStatus(`Failed to cancel job: ${result.error || result.message}`, 'error');
         }
     } catch (error) {
         showAdminStatus(`Error: ${error.message}`, 'error');
@@ -1262,19 +1240,18 @@ async function loadResetPreview() {
     const previewEl = document.getElementById('resetPreview');
 
     try {
-        const response = await fetch(`${API_BASE}/api/admin/reset/preview`, {
-            credentials: 'include'
-        });
+        const response = await fetch(`${API_BASE}/api/admin/reset/preview`);
 
         const result = await response.json();
 
-        if (response.ok && result.success) {
+        if (response.ok && result.data) {
+            const willDelete = result.data.willDelete || {};
             previewEl.innerHTML = `
                 <p class="warning-text"><i class="fas fa-exclamation-triangle"></i> This will delete:</p>
                 <ul class="reset-list">
-                    <li><strong>${formatNumber(result.entities || 0)}</strong> entities from Neo4j</li>
-                    <li><strong>${formatNumber(result.relationships || 0)}</strong> relationships from Neo4j</li>
-                    <li><strong>${formatNumber(result.embeddings || 0)}</strong> embeddings from PostgreSQL</li>
+                    <li><strong>${formatNumber(willDelete.entities || 0)}</strong> entities from Neo4j</li>
+                    <li><strong>${formatNumber(willDelete.relationships || 0)}</strong> relationships from Neo4j</li>
+                    <li><strong>${formatNumber(willDelete.embeddings || 0)}</strong> embeddings from PostgreSQL</li>
                 </ul>
                 <p class="backup-note"><i class="fas fa-shield-alt"></i> A backup will be created automatically before reset.</p>
             `;
@@ -1307,13 +1284,12 @@ window.confirmReset = async function() {
             headers: {
                 'Content-Type': 'application/json',
                 'x-admin-confirm': 'true'
-            },
-            credentials: 'include'
+            }
         });
 
         const result = await response.json();
 
-        if (response.ok && result.success) {
+        if (response.ok) {
             closeResetModal();
             showAdminStatus('Database reset complete. Backup created.', 'success');
 
@@ -1321,7 +1297,7 @@ window.confirmReset = async function() {
             await refreshAdminStatus();
             await loadResetPreview();
         } else {
-            throw new Error(result.error || 'Reset failed');
+            throw new Error(result.error || result.message || 'Reset failed');
         }
     } catch (error) {
         console.error('Reset failed:', error);
